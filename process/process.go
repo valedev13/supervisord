@@ -137,7 +137,8 @@ func (p *Process) addToCron() {
 // Start start the process
 // Args:
 //  wait - true, wait the program started or failed
-func (p *Process) Start(wait bool) {
+//  args - string, optional parameter to pass arguments
+func (p *Process) Start(wait bool, args ...string) {
 	log.WithFields(log.Fields{"program": p.GetName()}).Info("try to start program")
 	p.lock.Lock()
 	if p.inStart {
@@ -149,6 +150,12 @@ func (p *Process) Start(wait bool) {
 	p.inStart = true
 	p.stopByUser = false
 	p.lock.Unlock()
+
+	// check for args parameter passed, otherwise args as empty string
+	args_ := ""
+	if len(args) > 0 {
+		args_ = args[0]
+	}
 
 	var runCond *sync.Cond
 	if wait {
@@ -165,7 +172,7 @@ func (p *Process) Start(wait bool) {
 					runCond.Signal()
 					runCond.L.Unlock()
 				}
-			})
+			}, args_)
 			//avoid print too many logs if fail to start program too quickly
 			if time.Now().Unix()-p.startTime.Unix() < 2 {
 				time.Sleep(5 * time.Second)
@@ -401,8 +408,16 @@ func (p *Process) isRunning() bool {
 }
 
 // create Command object for the program
-func (p *Process) createProgramCommand() error {
+func (p *Process) createProgramCommand(args_ ...string) error {
 	args, err := parseCommand(p.config.GetStringExpression("command", ""))
+
+	if len(args_) > 0 && args_[0] != "" {
+		log.WithFields(log.Fields{"program": p.GetName()}).Warning("Different arguments than default provided")
+		params := strings.Fields(args_[0])
+		// prepend command string
+		params = append([]string{args[0]}, params...)
+		args = params
+	}
 
 	if err != nil {
 		return err
@@ -521,9 +536,15 @@ func (p *Process) monitorProgramIsRunning(endTime time.Time, monitorExited *int3
 	}
 }
 
-func (p *Process) run(finishCb func()) {
+func (p *Process) run(finishCb func(), args ...string) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	// check for args parameter passed, otherwise args as empty string
+	args_ := ""
+	if len(args) > 0 {
+		args_ = args[0]
+	}
 
 	// check if the program is in running state
 	if p.isRunning() {
@@ -555,7 +576,7 @@ func (p *Process) run(finishCb func()) {
 		p.changeStateTo(Starting)
 		atomic.AddInt32(p.retryTimes, 1)
 
-		err := p.createProgramCommand()
+		err := p.createProgramCommand(args_)
 		if err != nil {
 			p.failToStartProgram("fail to create program", finishCbWrapper)
 			break

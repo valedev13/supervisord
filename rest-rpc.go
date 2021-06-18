@@ -50,17 +50,33 @@ func (sr *SupervisorRestful) ListProgram(w http.ResponseWriter, req *http.Reques
 	}
 }
 
+type ProcessData struct {
+	Args string `json:"args"`
+}
+
 // StartProgram start the given program through restful interface
 func (sr *SupervisorRestful) StartProgram(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	params := mux.Vars(req)
-	success, err := sr._startProgram(params["name"])
+
+	var data ProcessData
+	decoder := json.NewDecoder(req.Body)
+
+	if err := decoder.Decode(&data); err != nil {
+		data.Args = ""
+	}
+
+	success, err := sr._startProgram(params["name"], data.Args)
 	r := map[string]bool{"success": err == nil && success}
 	json.NewEncoder(w).Encode(&r)
 }
 
-func (sr *SupervisorRestful) _startProgram(program string) (bool, error) {
-	startArgs := StartProcessArgs{Name: program, Wait: true}
+func (sr *SupervisorRestful) _startProgram(program string, args ...string) (bool, error) {
+	args_ := ""
+	if len(args) > 0 {
+		args_ = args[0]
+	}
+	startArgs := StartProcessArgs{Name: program, Wait: true, Args: args_}
 	result := struct{ Success bool }{false}
 	err := sr.supervisor.StartProcess(nil, &startArgs, &result)
 	return result.Success, err

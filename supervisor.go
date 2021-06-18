@@ -39,6 +39,7 @@ type Supervisor struct {
 type StartProcessArgs struct {
 	Name string // program name
 	Wait bool   `default:"true"` // Wait the program starting finished
+	Args string `default:""`     // Optional arguments
 }
 
 // ProcessStdin  process stdin from client
@@ -242,7 +243,7 @@ func (s *Supervisor) StartProcess(r *http.Request, args *StartProcessArgs, reply
 		return fmt.Errorf("fail to find process %s", args.Name)
 	}
 	for _, proc := range procs {
-		proc.Start(args.Wait)
+		proc.Start(args.Wait, args.Args)
 	}
 	reply.Success = true
 	return nil
